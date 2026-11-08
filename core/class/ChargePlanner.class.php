@@ -172,13 +172,18 @@ class ChargePlanner extends eqLogic {
 
     public static function cron5() {
         foreach (eqLogic::byType('ChargePlanner', true) as $eqLogic) {
+            try {
+                $eqLogic->repairCommands();
+            } catch (Throwable $e) {
+                log::add('ChargePlanner', 'error', $eqLogic->getHumanName() . ' : réparation des commandes impossible : ' . $e->getMessage());
+            }
             if ($eqLogic->getPlannerType() !== 'vehicule') {
                 continue;
             }
             try {
                 $eqLogic->evaluate();
-            } catch (Exception $e) {
-                log::add('ChargePlanner', 'error', $eqLogic->getHumanName() . ' : ' . $e->getMessage());
+            } catch (Throwable $e) {
+                log::add('ChargePlanner', 'error', $eqLogic->getHumanName() . ' : ' . $e->getMessage() . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')');
             }
         }
     }
@@ -203,6 +208,18 @@ class ChargePlanner extends eqLogic {
 
     public function postSave() {
         $this->checkAndCreateCommands();
+    }
+
+    /** Remet type / sous-type des commandes s'ils ont été abîmés (bug de la page en 0.2.1 et avant). */
+    public function repairCommands() {
+        foreach ($this->getCmd() as $cmd) {
+            if (!in_array($cmd->getType(), array('info', 'action'), true) || !is_string($cmd->getSubType()) || $cmd->getSubType() === '') {
+                log::add('ChargePlanner', 'warning', $this->getHumanName() . ' : commandes réparées');
+                $this->checkAndCreateCommands();
+                return true;
+            }
+        }
+        return false;
     }
 
     public function checkAndCreateCommands() {

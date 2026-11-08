@@ -63,7 +63,9 @@ function addCmdToTable(_cmd) {
   tr += '<input class="cmdAttr form-control input-sm roundedLeft" data-l1key="name" placeholder="{{Nom de la commande}}">';
   tr += '<span class="input-group-btn"><a class="cmdAction btn btn-sm btn-default roundedRight" data-l1key="chooseIcon" title="{{Choisir une icône}}"><i class="fas fa-icons"></i></a></span>';
   tr += '</div></td>';
-  tr += '<td><span class="cmdAttr label label-info" data-l1key="type"></span> <span class="cmdAttr label label-default" data-l1key="subType"></span></td>';
+  // Libellés en lecture seule : surtout pas de classe cmdAttr ici, sinon « type » et
+  // « subType » apparaissent deux fois dans le formulaire et sont enregistrés en tableau.
+  tr += '<td><span class="label label-info">' + init(_cmd.type) + '</span> <span class="label label-default">' + init(_cmd.subType) + '</span></td>';
   tr += '<td>';
   tr += '<label class="checkbox-inline"><input type="checkbox" class="cmdAttr" data-l1key="isVisible">{{Afficher}}</label> ';
   if (_cmd.type === 'info') {
