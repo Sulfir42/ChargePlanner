@@ -154,6 +154,23 @@ check('Log de comparaison plugin / scénario', count($ferait) > 0 && strpos(end(
 ChargePlannerSite::regulate();
 check('Intervalle minimum respecté (pas de 2e cycle immédiat)', count(array_filter($GLOBALS['LOG'], function ($l) { return strpos($l, '[Observation] ferait') !== false; })) === count($ferait));
 
+echo "Comparaison avec le scénario\n";
+$pred = $pil->getCache('obs_pred');
+check('Prédiction mémorisée', isset($pred['wb1']) && $pred['wb1'] === (int) $b1->cmdValue('cible'));
+check('Consigne du scénario publiée', (int) $b1->cmdValue('cible_ref') === 6);
+// Le scénario tourne et arrive au même résultat que la prédiction (WB1), mais pas WB2.
+$sc->data['wb1_cible'] = $pred['wb1']; $sc->data['wb2_cible'] = $pred['wb2'] + 10;
+$pil->setCache('reg_last_end', 0);
+ChargePlannerSite::regulate();
+$st = $pil->getCache('obs_stats');
+check('Deux comparaisons, une concordante', $st['n'] === 2 && $st['ok'] === 1, json_encode($st));
+check('Concordance publiée', (float) $pil->cmdValue('concordance') === 50.0);
+check('Écart écrit dans le log', count(array_filter($GLOBALS['LOG'], function ($l) { return strpos($l, '[Observation] Écart Wallbox 02') !== false; })) === 1);
+$pil->setCache('reg_last_end', 0);
+ChargePlannerSite::regulate();
+check('État du scénario inchangé : pas de nouvelle comparaison', $pil->getCache('obs_stats')['n'] === 2);
+$sc->data['wb1_cible'] = 6; $sc->data['wb2_cible'] = 0;
+
 echo "Passage en actif\n";
 $GLOBALS['CONFIG']['fonctionnement'] = 'actif';
 ChargePlanner::postConfig_fonctionnement('actif');

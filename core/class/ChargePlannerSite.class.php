@@ -224,6 +224,7 @@ class ChargePlannerSite {
                 array('mode_eco', 'Eco', 'action', 'other', '', 1, 0),
                 array('cible', __('Consigne', __FILE__), 'info', 'numeric', 'A', 1, 1),
                 array('raison', __('Raison', __FILE__), 'info', 'string', '', 1, 0),
+                array('cible_ref', __('Consigne scénario', __FILE__), 'info', 'numeric', 'A', 0, 1),
             );
         }
         if ($type === 'pilotage') {
@@ -238,6 +239,8 @@ class ChargePlannerSite {
                 array('urgence', __('Urgence', __FILE__), 'info', 'binary', '', 0, 1),
                 array('raison', __('Raison', __FILE__), 'info', 'string', '', 1, 0),
                 array('fonctionnement', __('Fonctionnement', __FILE__), 'info', 'string', '', 1, 0),
+                array('concordance', __('Concordance avec le scénario', __FILE__), 'info', 'numeric', '%', 0, 1),
+                array('ecarts', __('Écarts avec le scénario', __FILE__), 'info', 'numeric', '', 0, 1),
             );
         }
         return array();
@@ -408,10 +411,81 @@ class ChargePlannerSite {
                     $parts[] = ChargePlanner::borneName($i) . ' plugin ' . $out['wb' . $i . '_cible'] . ' A / scénario ' . (int) $scenario->getData('wb' . $i . '_cible') . ' A';
                 }
                 $compare = ' | ' . implode(', ', $parts);
+                self::compareWithScenario($pilotage, $scenario, $out);
             }
-            log::add('ChargePlanner', count($io->ops) > 0 ? 'info' : 'debug', '[Observation] ferait : ' . $actions . $compare . ' | ' . $out['raison']);
+            log::add('ChargePlanner', 'debug', '[Observation] ferait : ' . $actions . $compare . ' | ' . $out['raison']);
         }
         log::add('ChargePlanner', 'debug', $io->logText);
+    }
+
+    /**
+     * Comparaison en observation, enregistrée dans l'historique (pas dans le log,
+     * limité en taille).
+     *
+     * À chaque cycle, le plugin part de l'état laissé par le dernier passage du
+     * scénario : sa consigne est donc une prédiction du passage suivant du
+     * scénario. Quand l'état du scénario change (il a tourné et modifié quelque
+     * chose), on compare sa nouvelle consigne à la dernière prédiction faite
+     * avant ce passage. Écart de 2 A ou moins : concordant (les mesures ont
+     * bougé de quelques secondes entre les deux calculs).
+     */
+    private static function compareWithScenario($pilotage, $scenario, array $out) {
+        $now = time();
+        $data = self::readScenarioState($scenario);
+        $hash = md5(json_encode($data));
+        $ref = array();
+        foreach (ChargePlanner::BORNES as $i) {
+            $ref[$i] = (int) ($data['wb' . $i . '_cible'] ?? 0);
+            $borne = self::borneEq($i);
+            if (is_object($borne)) {
+                $borne->checkAndUpdateCmd('cible_ref', $ref[$i]);
+            }
+        }
+
+        $day = date('Y-m-d', $now);
+        $stats = $pilotage->getCache('obs_stats', array());
+        if (!is_array($stats) || ($stats['day'] ?? '') !== $day) {
+            if (is_array($stats) && !empty($stats['n'])) {
+                log::add('ChargePlanner', 'info', sprintf('[Observation] Bilan du %s : %d comparaisons, %d %% concordantes, %d écart(s)', $stats['day'], $stats['n'], round(100 * $stats['ok'] / $stats['n']), $stats['n'] - $stats['ok']));
+            }
+            $stats = array('day' => $day, 'n' => 0, 'ok' => 0, 'hour' => (int) date('G', $now), 'hn' => 0, 'hok' => 0);
+        }
+
+        $pred = $pilotage->getCache('obs_pred', array());
+        if (is_array($pred) && isset($pred['hash']) && $pred['hash'] !== $hash && $now - (int) $pred['ts'] < 120) {
+            foreach (ChargePlanner::BORNES as $i) {
+                $p = (int) $pred['wb' . $i];
+                $ok = abs($p - $ref[$i]) <= 2;
+                $stats['n']++;
+                $stats['hn']++;
+                if ($ok) {
+                    $stats['ok']++;
+                    $stats['hok']++;
+                } else {
+                    log::add('ChargePlanner', 'info', sprintf('[Observation] Écart %s : plugin %d A, scénario %d A | %s', ChargePlanner::borneName($i), $p, $ref[$i], $pred['raison']));
+                }
+            }
+            $pilotage->checkAndUpdateCmd('concordance', round(100 * $stats['ok'] / $stats['n'], 1));
+            $pilotage->checkAndUpdateCmd('ecarts', $stats['n'] - $stats['ok']);
+        }
+
+        // Bilan horaire dans le log.
+        $hour = (int) date('G', $now);
+        if ($hour !== (int) $stats['hour']) {
+            if ($stats['hn'] > 0) {
+                log::add('ChargePlanner', 'info', sprintf('[Observation] %dh-%dh : %d comparaisons, %d %% concordantes', $stats['hour'], $stats['hour'] + 1, $stats['hn'], round(100 * $stats['hok'] / $stats['hn'])));
+            }
+            $stats['hour'] = $hour;
+            $stats['hn'] = 0;
+            $stats['hok'] = 0;
+        }
+        $pilotage->setCache('obs_stats', $stats);
+
+        $pred = array('hash' => $hash, 'ts' => $now, 'raison' => $out['raison']);
+        foreach (ChargePlanner::BORNES as $i) {
+            $pred['wb' . $i] = (int) $out['wb' . $i . '_cible'];
+        }
+        $pilotage->setCache('obs_pred', $pred);
     }
 
     /* ------------------------------------------------------------------ */
