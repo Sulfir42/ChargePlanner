@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documentation — ChargePlanner pour Jeedom</title>
+<meta name="description" content="Documentation du plugin Jeedom ChargePlanner : objectifs de charge, boost, jours creux, configuration des bornes.">
+<link rel="icon" href="assets/icon.png">
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;max-width:820px;margin:40px auto;padding:0 20px;color:#1b1f1d;line-height:1.6}
+  h1{color:#2b9348;display:flex;align-items:center;gap:12px} h1 img{width:48px;height:48px}
+  h2{border-bottom:1px solid #e2e6e4;padding-bottom:4px;margin-top:2em}
+  code{background:#eef1ef;padding:1px 5px;border-radius:4px}
+  .note{background:#fff8e6;border-left:4px solid #e8b93a;padding:10px 14px;border-radius:4px}
+  table{border-collapse:collapse;width:100%} td,th{border:1px solid #e2e6e4;padding:6px 8px;text-align:left;vertical-align:top}
+  a{color:#1f6e35}
+</style>
+</head>
+<body>
+<h1><img src="assets/icon.png" alt="">ChargePlanner</h1>
+<p>Planification intelligente de la charge des véhicules électriques. Le plugin choisit, voiture par voiture, si la borne doit charger à fond (mode <strong>Normal</strong>) ou rester en <strong>Eco</strong> pour profiter du surplus solaire. Il ne touche ni aux ampères ni aux limites du compteur : votre scénario de pilotage existant continue de gérer la puissance.</p>
+<p><a href="changelog.html">Changelog</a></p>
+
+<h2>1. Configuration du plugin</h2>
+<p><em>Plugins → Gestion des plugins → ChargePlanner.</em></p>
+<ul>
+  <li><strong>Mode simulation</strong> (activé à l'installation) : le plugin calcule et affiche ses décisions mais n'envoie aucune commande. Les décisions sont aussi écrites dans le log <code>ChargePlanner</code> (« passerait la borne en Normal… »). Désactivez-le quand le comportement vous convient.</li>
+  <li><strong>Jours creux</strong> : jours de la semaine creux toute la journée (mercredi, samedi, dimanche par défaut), jours fériés français calculés automatiquement, et dates supplémentaires (une par ligne).</li>
+  <li><strong>Heure de démarrage du boost</strong> : 0h05 par défaut.</li>
+  <li><strong>Bornes 1 et 2</strong> : pour chacune, le nom et les commandes à utiliser (bouton liste pour les choisir) :
+    <table>
+      <tr><th>Champ</th><th>Exemple (plugin myWallBox + virtuel de mode)</th></tr>
+      <tr><td>Mode actuel (info)</td><td><code>#[Maison][Wallbox 01 - Mode][Mode]#</code></td></tr>
+      <tr><td>Passer en Normal / Eco (actions)</td><td><code>#[Maison][Wallbox 01 - Mode][Normal]#</code>, <code>…[Eco]#</code></td></tr>
+      <tr><td>Statut ID (info)</td><td><code>#[Maison][Wallbox01][Statut ID]#</code></td></tr>
+      <tr><td>Énergie de la session (info, kWh)</td><td><code>#[Maison][Wallbox01][Énergie consommée]#</code> (optionnel)</td></tr>
+    </table>
+  </li>
+</ul>
+
+<h2>2. Ajouter une voiture</h2>
+<ul>
+  <li><strong>Borne habituelle</strong> et <strong>puissance de charge</strong> en mode Normal (ex. 7200 W).</li>
+  <li><strong>Niveau de batterie</strong> : la commande info en % (ex. <code>#[Garage][E208 GT][Batterie]#</code> du plugin Stellantis Connect).</li>
+  <li><strong>Capacité utile</strong> (kWh), <strong>rendement</strong> (90 % par défaut) et <strong>marge de sécurité</strong> (30 min par défaut).</li>
+</ul>
+
+<h2>3. Objectifs</h2>
+<p>Jusqu'à 4 objectifs par voiture : « la voiture doit avoir au moins X % tel jour à telle heure ». Exemple : vendredi 00:00 → 50 %, dimanche 22:00 → 100 %.</p>
+<p>Toutes les 5 minutes, le plugin calcule l'énergie qui manque (pertes comprises), la durée de charge à la puissance indiquée plus la marge, et l'heure de départ au plus tard. Avant, la borne reste en Eco ; à l'heure dite, elle passe en Normal, puis revient en Eco une fois l'objectif atteint.</p>
+<p>Exemple : batterie de 52 kWh à 50 %, objectif 100 % dimanche 22h → il manque 26 kWh, soit environ 28,9 kWh tirés du réseau, 4 h de charge à 7,2 kW + 30 min de marge → départ vers 17h15. Si le solaire a déjà amené la voiture à 80 % dans l'après-midi, le départ glisse à 19h45.</p>
+<p><strong>Compléter de préférence en jour creux</strong> : si un jour plein précède l'échéance (ex. jeudi avant un objectif vendredi 0h), la charge manquante est placée sur le dernier jour creux (mercredi soir). S'il ne reste pas assez d'heures creuses, le complément se fait au plus tard en heure pleine.</p>
+
+<h2>4. Boost</h2>
+<ul>
+  <li><strong>Boost (prochain jour creux)</strong> : démarre au prochain jour creux à l'heure configurée (0h05), ou tout de suite si on est déjà un jour creux.</li>
+  <li><strong>Boost immédiat</strong> : passe en Normal maintenant.</li>
+  <li>Le boost s'arrête tout seul quand la voiture est débranchée, quand la charge est terminée (la borne attend la voiture depuis 15 min, ou batterie à 100 %), ou au bout de 24 h. La borne revient alors à son mode d'origine.</li>
+</ul>
+
+<h2>5. Commandes</h2>
+<table>
+  <tr><th>Commande</th><th>Rôle</th></tr>
+  <tr><td>Décision</td><td>Normal ou Eco</td></tr>
+  <tr><td>Raison</td><td>Explication en clair de la décision</td></tr>
+  <tr><td>Prochain objectif / Départ prévu</td><td>Ex. « dim. 22h00 → 100 % » / « 17h15 »</td></tr>
+  <tr><td>Batterie estimée</td><td>% du constructeur, complété par l'énergie comptée par la borne</td></tr>
+  <tr><td>Boost / État boost</td><td>Aucun, Programmé mer. 0h05, En cours</td></tr>
+  <tr><td>Borne du jour / Choisir la borne</td><td>Pour les jours où les voitures sont inversées</td></tr>
+  <tr><td>Pilotage ON / OFF</td><td>Suspend le pilotage d'une voiture sans désactiver l'équipement</td></tr>
+</table>
+
+<h2>6. Règles de cohabitation</h2>
+<ul>
+  <li>Le plugin ne remet en Eco que ce qu'il a lui-même passé en Normal.</li>
+  <li>Si vous changez le mode à la main pendant une charge forcée, il rend la main pour ce plan et ne le reforce pas.</li>
+  <li>Voiture débranchée : aucune action ; si le plugin avait forcé Normal, la borne retrouve son mode d'origine.</li>
+</ul>
+
+<div class="note">Le % de batterie fourni par le cloud du constructeur peut avoir plusieurs dizaines de minutes de retard. La marge de sécurité et l'estimation par l'énergie de la borne compensent ce retard.</div>
+</body>
+</html>

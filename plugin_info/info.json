@@ -1,0 +1,27 @@
+{
+  "id": "ChargePlanner",
+  "name": "ChargePlanner",
+  "description": {
+    "fr_FR": "Planification intelligente de la charge des véhicules électriques : objectifs de batterie (ex. 100 % lundi 0h), boost ponctuel au prochain jour creux, calendrier des jours creux avec jours fériés. Bascule la borne entre ses modes Normal et Eco sans toucher au pilotage de puissance existant."
+  },
+  "licence": "AGPL",
+  "author": "Sulfir",
+  "require": "4.4",
+  "category": "energy",
+  "hasDependency": false,
+  "hasOwnDeamon": false,
+  "documentation": "https://sulfir42.github.io/ChargePlanner/",
+  "changelog": "https://sulfir42.github.io/ChargePlanner/changelog.html",
+  "documentation_beta": "https://sulfir42.github.io/ChargePlanner/",
+  "changelog_beta": "https://sulfir42.github.io/ChargePlanner/changelog.html",
+  "language": [
+    "fr_FR"
+  ],
+  "compatibility": [
+    "smart",
+    "rpi",
+    "docker",
+    "diy"
+  ],
+  "version": "0.1.0"
+}
