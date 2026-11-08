@@ -96,7 +96,7 @@ $borneFields = array(
             <div class="input-group">
               <input class="configKey form-control roundedLeft" data-l1key="borne<?php echo $b; ?>_<?php echo $key; ?>">
               <span class="input-group-btn">
-                <a class="btn btn-default roundedRight chargePlannerSelectCmd" data-type="<?php echo $field[1]; ?>"><i class="fas fa-list-alt"></i></a>
+                <a class="btn btn-default roundedRight chargePlannerConfigSelectCmd" data-type="<?php echo $field[1]; ?>"><i class="fas fa-list-alt"></i></a>
               </span>
             </div>
           </div>
@@ -106,13 +106,38 @@ $borneFields = array(
   </fieldset>
 </form>
 <script>
-  document.querySelectorAll('.chargePlannerSelectCmd').forEach(function (btn) {
+/*
+ * Contournement d'une course dans le noyau Jeedom : getSelectModal() appelle
+ * mod_insertCmd.setOptions() avant que la fenêtre cmd.human.insert ait
+ * exécuté son script quand elle est ouverte depuis une autre fenêtre (page de
+ * configuration du plugin). On pré-déclare l'objet avec un setOptions
+ * d'attente ; le script de la fenêtre le remplace dès qu'il est chargé.
+ */
+function chargePlannerPickCmd(type, input) {
+  if (window.mod_insertCmd == undefined) {
+    window.mod_insertCmd = function () {};
+    window.mod_insertCmd.options = { cmd: {}, eqLogic: {}, object: {} };
+  }
+  var waiting = function (opts, tries) {
+    tries = tries || 0;
+    if (window.mod_insertCmd.setOptions !== waiting) {
+      window.mod_insertCmd.setOptions(opts);
+    } else if (tries < 100) {
+      setTimeout(function () { waiting(opts, tries + 1); }, 50);
+    }
+  };
+  if (typeof window.mod_insertCmd.setOptions !== 'function') {
+    window.mod_insertCmd.setOptions = waiting;
+  }
+  jeedom.cmd.getSelectModal({ cmd: { type: type || 'info' } }, function (result) {
+    input.value = result.human;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
+  document.querySelectorAll('.chargePlannerConfigSelectCmd').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      var input = btn.closest('.input-group').querySelector('input');
-      jeedom.cmd.getSelectModal({ cmd: { type: btn.getAttribute('data-type') } }, function (result) {
-        input.value = result.human;
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-      });
+      chargePlannerPickCmd(btn.getAttribute('data-type'), btn.closest('.input-group').querySelector('input'));
     });
   });
 </script>
