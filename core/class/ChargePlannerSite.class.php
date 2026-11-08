@@ -166,31 +166,53 @@ class ChargePlannerSite {
 
     /** Crée les équipements Pilotage et Bornes s'ils n'existent pas. */
     public static function ensureCoreEquipments() {
+        // Noms propres au plugin : « Wallbox 01 » existe déjà (plugin myWallBox) dans
+        // le même objet, et Jeedom refuse deux équipements de même nom par objet.
         $wanted = array('pilotage' => array('pilotage', __('Pilotage recharge', __FILE__)));
         foreach (ChargePlanner::BORNES as $i) {
-            $wanted['borne' . $i] = array('borne', ChargePlanner::borneName($i));
+            $wanted['borne' . $i] = array('borne', sprintf(__('Recharge borne %d', __FILE__), $i));
         }
+        $object = jeeObject::byName('Maison');
         foreach ($wanted as $logicalId => $def) {
             if (is_object(eqLogic::byLogicalId($logicalId, 'ChargePlanner'))) {
                 continue;
             }
-            $eq = new ChargePlanner();
-            $eq->setEqType_name('ChargePlanner');
-            $eq->setLogicalId($logicalId);
-            $eq->setName($def[1]);
-            $eq->setConfiguration('type', $def[0]);
-            if ($def[0] === 'borne') {
-                $eq->setConfiguration('borne_id', (int) substr($logicalId, 5));
+            try {
+                $eq = new ChargePlanner();
+                $eq->setEqType_name('ChargePlanner');
+                $eq->setLogicalId($logicalId);
+                $eq->setName(self::freeName($object, $def[1]));
+                $eq->setConfiguration('type', $def[0]);
+                if ($def[0] === 'borne') {
+                    $eq->setConfiguration('borne_id', (int) substr($logicalId, 5));
+                }
+                if (is_object($object)) {
+                    $eq->setObject_id($object->getId());
+                }
+                $eq->setIsEnable(1);
+                $eq->setIsVisible(1);
+                $eq->save();
+                log::add('ChargePlanner', 'info', 'Équipement créé : ' . $eq->getName());
+            } catch (Exception $e) {
+                log::add('ChargePlanner', 'error', 'Création de l\'équipement ' . $def[1] . ' impossible : ' . $e->getMessage());
             }
-            $object = jeeObject::byName('Maison');
-            if (is_object($object)) {
-                $eq->setObject_id($object->getId());
-            }
-            $eq->setIsEnable(1);
-            $eq->setIsVisible(1);
-            $eq->save();
-            log::add('ChargePlanner', 'info', 'Équipement créé : ' . $def[1]);
         }
+    }
+
+    /** Nom libre dans l'objet (ajoute « (2) », « (3) »… si besoin). */
+    private static function freeName($object, $name) {
+        if (!is_object($object) || !method_exists('eqLogic', 'byObjectNameEqLogicName')) {
+            return $name;
+        }
+        $candidate = $name;
+        for ($n = 2; $n < 10; $n++) {
+            $found = eqLogic::byObjectNameEqLogicName($object->getName(), $candidate);
+            if (empty($found)) {
+                return $candidate;
+            }
+            $candidate = $name . ' (' . $n . ')';
+        }
+        return $candidate;
     }
 
     public static function commandsFor($type) {

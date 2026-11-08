@@ -15,6 +15,12 @@
 <h1>ChargePlanner — changelog</h1>
 <p><a href="index.html">← Documentation</a></p>
 
+<h2>0.2.1 — 08/11/2026 (beta)</h2>
+<ul>
+  <li>Correction : les équipements Borne ne pouvaient pas être créés (nom « Wallbox 01 » déjà pris par le plugin myWallBox dans le même objet), ce qui bloquait toute la régulation. Ils s'appellent désormais « Recharge borne 1 » et « Recharge borne 2 ».</li>
+  <li>Les erreurs du cron sont maintenant écrites dans le log du plugin.</li>
+</ul>
+
 <h2>0.2.0 — 08/11/2026 (beta)</h2>
 <ul>
   <li>Plugin tout-en-un : la régulation des bornes (scénario « Pilotage Wallbox V4.0 ») est intégrée au plugin, vérifiée cycle par cycle contre l'original.</li>

@@ -2,7 +2,7 @@
   "id": "ChargePlanner",
   "name": "ChargePlanner",
   "description": {
-    "fr_FR": "Planification intelligente de la charge des véhicules électriques : objectifs de batterie (ex. 100 % lundi 0h), boost ponctuel au prochain jour creux, calendrier des jours creux avec jours fériés. Bascule la borne entre ses modes Normal et Eco sans toucher au pilotage de puissance existant."
+    "fr_FR": "Plugin privé de pilotage des Wallbox : régulation des ampères selon le surplus solaire et la limite du compteur, modes Normal / Eco par borne, priorisation, objectifs de batterie par voiture, boost au prochain jour creux."
   },
   "licence": "AGPL",
   "author": "Sulfir",
@@ -23,5 +23,5 @@
     "docker",
     "diy"
   ],
-  "version": "0.2.0"
+  "version": "0.2.1"
 }

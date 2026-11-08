@@ -159,10 +159,14 @@ class ChargePlanner extends eqLogic {
 
     /** Chien de garde : relance la régulation si l'écouteur s'est tu. */
     public static function cron() {
-        ChargePlannerSite::ensureCoreEquipments();
-        $pilotage = ChargePlannerSite::pilotageEq();
-        if (is_object($pilotage) && time() - (int) $pilotage->getCache('reg_last_end', 0) > 55) {
-            ChargePlannerSite::regulate(true);
+        try {
+            ChargePlannerSite::ensureCoreEquipments();
+            $pilotage = ChargePlannerSite::pilotageEq();
+            if (is_object($pilotage) && time() - (int) $pilotage->getCache('reg_last_end', 0) > 55) {
+                ChargePlannerSite::regulate(true);
+            }
+        } catch (Throwable $e) {
+            log::add('ChargePlanner', 'error', 'Cron : ' . $e->getMessage() . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')');
         }
     }
 

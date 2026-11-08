@@ -21,7 +21,7 @@ class config {
     public static function save($k, $v, $p = 'core') { $GLOBALS['CONFIG'][$k] = $v; }
     public static function remove($k, $p = 'core') { unset($GLOBALS['CONFIG'][$k]); }
 }
-class jeeObject { public static function byName($n) { return null; } }
+class jeeObject { public static function byName($n) { return new jeeObject(); } public function getId() { return 1; } public function getName() { return 'Maison'; } }
 class listener {
     public static $instance = null; public $events = array();
     public static function byClassAndFunction($c, $f) { return self::$instance; }
@@ -61,6 +61,11 @@ class cmd {
 class eqLogic {
     public $conf = array(); public $cache = array(); public $cmds = array(); public $logicalId = ''; public $name = ''; public $enable = 1;
     public static function byType($t, $e = false) { return $GLOBALS['EQS']; }
+    public static $existing = array('Maison' => array('Wallbox 01', 'Wallbox 02', 'Recharge borne 2'));
+    public static function byObjectNameEqLogicName($o, $n) {
+        foreach ($GLOBALS['EQS'] as $eq) { if ($eq->name === $n) { return array($eq); } }
+        return in_array($n, self::$existing[$o] ?? array(), true) ? array(1) : array();
+    }
     public static function byLogicalId($id, $t) { foreach ($GLOBALS['EQS'] as $eq) { if ($eq->logicalId === $id) { return $eq; } } return null; }
     public function getConfiguration($k, $d = '') { return array_key_exists($k, $this->conf) ? $this->conf[$k] : $d; }
     public function setConfiguration($k, $v) { $this->conf[$k] = $v; }
@@ -128,6 +133,7 @@ echo "Création des équipements\n";
 ChargePlannerSite::ensureCoreEquipments();
 $pil = ChargePlannerSite::pilotageEq(); $b1 = ChargePlannerSite::borneEq(1); $b2 = ChargePlannerSite::borneEq(2);
 check('Pilotage + 2 bornes créés', is_object($pil) && is_object($b1) && is_object($b2) && count($GLOBALS['EQS']) === 3);
+check('Noms libres dans l\'objet', $b1->name === 'Recharge borne 1' && $b2->name === 'Recharge borne 2 (2)', $b1->name . ' / ' . $b2->name);
 check('Commandes de borne créées', isset($b1->cmds['mode']) || $b1->cmdValue('mode', '') !== null);
 ChargePlannerSite::ensureCoreEquipments();
 check('Pas de doublon au second appel', count($GLOBALS['EQS']) === 3);
