@@ -7,6 +7,18 @@ sendVarToJS('eqType', $plugin->getId());
 $eqLogics = eqLogic::byType($plugin->getId());
 require_once __DIR__ . '/../../core/class/ChargePlanner.class.php';
 $simulation = ChargePlanner::isSimulation();
+$groups = array('site' => array(), 'vehicule' => array());
+foreach ($eqLogics as $eqLogic) {
+    $groups[$eqLogic->getPlannerType() === 'vehicule' ? 'vehicule' : 'site'][] = $eqLogic;
+}
+function cpCard($eqLogic, $plugin) {
+    $opacity = ($eqLogic->getIsEnable()) ? '' : 'disableCard';
+    $icons = array('pilotage' => 'fa-sitemap', 'borne' => 'fa-charging-station', 'vehicule' => 'fa-car');
+    echo '<div class="eqLogicDisplayCard cursor ' . $opacity . '" data-eqLogic_id="' . $eqLogic->getId() . '">';
+    echo '<img src="' . $plugin->getPathImgIcon() . '">';
+    echo '<br><span class="name"><i class="fas ' . ($icons[$eqLogic->getPlannerType()] ?? 'fa-car') . '"></i> ' . $eqLogic->getHumanName(true, true) . '</span>';
+    echo '</div>';
+}
 $days = ChargePlannerFormat::DAYS;
 ?>
 <div class="row row-overflow">
@@ -21,31 +33,18 @@ $days = ChargePlannerFormat::DAYS;
       </div>
     </div>
     <?php if ($simulation) { ?>
-      <div class="alert alert-warning"><i class="fas fa-flask"></i> {{Mode simulation actif : les décisions sont calculées et affichées, mais aucune commande n'est envoyée aux bornes. Désactivez-le dans la configuration du plugin.}}</div>
+      <div class="alert alert-warning"><i class="fas fa-eye"></i> {{Fonctionnement « observation » : la régulation et les objectifs sont calculés et affichés, mais aucune commande n'est envoyée aux bornes. Le passage en « actif » se fait dans la configuration du plugin.}}</div>
     <?php } ?>
+    <legend><i class="fas fa-sitemap"></i> {{Pilotage et bornes}}</legend>
+    <div class="eqLogicThumbnailContainer">
+      <?php foreach ($groups['site'] as $eqLogic) { cpCard($eqLogic, $plugin); } ?>
+    </div>
     <legend><i class="fas fa-car"></i> {{Mes voitures}}</legend>
-    <?php if (count($eqLogics) == 0) { ?>
+    <?php if (count($groups['vehicule']) == 0) { ?>
       <div class="text-center" style="font-size:1.2em;font-weight:bold;">{{Aucune voiture. Cliquez sur « Ajouter une voiture ».}}</div>
     <?php } else { ?>
-      <div class="input-group" style="margin:5px;">
-        <input class="form-control roundedLeft" placeholder="{{Rechercher}}" id="in_searchEqlogic">
-        <div class="input-group-btn">
-          <a id="bt_resetSearch" class="btn" style="width:30px"><i class="fas fa-times"></i></a>
-          <a class="btn roundedRight hidden" id="bt_pluginDisplayAsTable" data-coreSupport="1" data-state="0"><i class="fas fa-grip-lines"></i></a>
-        </div>
-      </div>
       <div class="eqLogicThumbnailContainer">
-        <?php
-        foreach ($eqLogics as $eqLogic) {
-            $opacity = ($eqLogic->getIsEnable()) ? '' : 'disableCard';
-            echo '<div class="eqLogicDisplayCard cursor ' . $opacity . '" data-eqLogic_id="' . $eqLogic->getId() . '">';
-            echo '<img src="' . $plugin->getPathImgIcon() . '">';
-            echo '<br><span class="name">' . $eqLogic->getHumanName(true, true) . '</span>';
-            echo '<span class="hiddenAsCard displayTableRight hidden">';
-            echo ($eqLogic->getIsVisible() == 1) ? '<i class="fas fa-eye" title="{{Equipement visible}}"></i>' : '<i class="fas fa-eye-slash" title="{{Equipement non visible}}"></i>';
-            echo '</span></div>';
-        }
-        ?>
+        <?php foreach ($groups['vehicule'] as $eqLogic) { cpCard($eqLogic, $plugin); } ?>
       </div>
     <?php } ?>
   </div>
@@ -61,7 +60,7 @@ $days = ChargePlannerFormat::DAYS;
     <ul class="nav nav-tabs" role="tablist">
       <li role="presentation"><a href="#" class="eqLogicAction" aria-controls="home" role="tab" data-toggle="tab" data-action="returnToThumbnailDisplay"><i class="fas fa-arrow-circle-left"></i></a></li>
       <li role="presentation" class="active"><a href="#eqlogictab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-car"></i> {{Voiture}}</a></li>
-      <li role="presentation"><a href="#objectivetab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-bullseye"></i> {{Objectifs}}</a></li>
+      <li role="presentation" class="cp-vehicule"><a href="#objectivetab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-bullseye"></i> {{Objectifs}}</a></li>
       <li role="presentation"><a href="#commandtab" aria-controls="profile" role="tab" data-toggle="tab"><i class="fas fa-list"></i> {{Commandes}}</a></li>
     </ul>
     <div class="tab-content">
@@ -76,6 +75,8 @@ $days = ChargePlannerFormat::DAYS;
                 <label class="col-sm-4 control-label">{{Nom de la voiture}}</label>
                 <div class="col-sm-6">
                   <input type="text" class="eqLogicAttr form-control" data-l1key="id" style="display:none;">
+                  <input type="text" class="eqLogicAttr" data-l1key="configuration" data-l2key="type" style="display:none;">
+                  <input type="text" class="eqLogicAttr" data-l1key="configuration" data-l2key="borne_id" style="display:none;">
                   <input type="text" class="eqLogicAttr form-control" data-l1key="name" placeholder="{{Ex. E208}}">
                 </div>
               </div>
@@ -100,6 +101,8 @@ $days = ChargePlannerFormat::DAYS;
                 </div>
               </div>
 
+              <div class="cp-site alert alert-info" style="display:none;">{{Équipement créé par le plugin. Ses commandes (mode, priorisation, consigne, raison) sont alimentées par la régulation ; les réglages se font dans la configuration du plugin.}}</div>
+              <div class="cp-vehicule">
               <legend><i class="fas fa-charging-station"></i> {{Borne}}</legend>
               <div class="form-group">
                 <label class="col-sm-4 control-label">{{Borne habituelle}}
@@ -121,9 +124,10 @@ $days = ChargePlannerFormat::DAYS;
                   <input type="number" min="1000" max="22000" step="100" class="eqLogicAttr form-control" data-l1key="configuration" data-l2key="power_w">
                 </div>
               </div>
+              </div>
             </div>
 
-            <div class="col-lg-6">
+            <div class="col-lg-6 cp-vehicule">
               <legend><i class="fas fa-car-battery"></i> {{Batterie}}</legend>
               <div class="form-group">
                 <label class="col-sm-4 control-label">{{Niveau de batterie (info, %)}}</label>

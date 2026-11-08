@@ -3,18 +3,21 @@
  *
  * Plugin Name: ChargePlanner
  *
- * Un équipement = une voiture. Toutes les 5 minutes, le plugin lit le niveau
- * de batterie, l'état de la borne et les objectifs, demande au moteur s'il
- * faut charger à fond, et bascule la borne entre ses modes « Normal » et
- * « Eco ». Il ne touche jamais aux ampères ni aux limites du compteur : ça
- * reste le travail du scénario de pilotage existant.
+ * Gestionnaire de recharge (plugin privé). Trois sortes d'équipements :
+ *  - Pilotage (unique) : priorisation, surplus, budget, raison ; porte la
+ *    régulation des deux bornes (transposition du scénario V4, voir
+ *    ChargePlannerSite / ChargePlannerRegulator) ;
+ *  - Borne (x2) : mode Normal / Eco, consigne, raison ;
+ *  - Voiture : objectifs de batterie, boost, borne du jour. Toutes les
+ *    5 minutes, le moteur d'objectifs décide si la borne de la voiture doit
+ *    passer en Normal ou rester en Eco.
  *
- * Règles de cohabitation :
+ * Règles de cohabitation côté voitures :
  *  - le plugin ne remet en Eco que ce qu'il a lui-même passé en Normal ;
  *  - si quelqu'un change le mode à la main pendant une charge forcée,
  *    le plugin rend la main pour ce plan et ne le reforce pas ;
- *  - en mode simulation (par défaut à l'installation), il calcule et
- *    affiche tout mais n'envoie aucune commande.
+ *  - en fonctionnement « observation » (par défaut), tout est calculé et
+ *    affiché mais aucune commande n'est envoyée.
  */
 
 if (!class_exists('eqLogic')) {
@@ -22,6 +25,7 @@ if (!class_exists('eqLogic')) {
 }
 require_once __DIR__ . '/ChargePlannerCalendar.class.php';
 require_once __DIR__ . '/ChargePlannerEngine.class.php';
+require_once __DIR__ . '/ChargePlannerSite.class.php';
 
 class ChargePlanner extends eqLogic {
 
@@ -45,8 +49,54 @@ class ChargePlanner extends eqLogic {
         return ($value === '' || $value === null) ? $default : $value;
     }
 
+    /** « actif » : le plugin pilote réellement ; sinon « observation ». */
+    public static function isActive() {
+        return self::globalConfig('fonctionnement', 'observation') === 'actif';
+    }
+
     public static function isSimulation() {
-        return (int) self::globalConfig('simulation', 1) === 1;
+        return !self::isActive();
+    }
+
+    public static function readCmdValue($ref) {
+        $r = self::readCmd($ref);
+        return $r === null ? '' : $r['value'];
+    }
+
+    /** Appelé par Jeedom après l'enregistrement de la clé « fonctionnement ». */
+    public static function postConfig_fonctionnement($value) {
+        // Jeedom rappelle cette méthode à chaque sauvegarde de la configuration :
+        // on n'agit que si le fonctionnement a réellement changé.
+        $applied = config::byKey('fonctionnement_applied', 'ChargePlanner', 'observation');
+        $wanted = ($value === 'actif') ? 'actif' : 'observation';
+        if ($applied === $wanted) {
+            return;
+        }
+        config::save('fonctionnement_applied', $wanted, 'ChargePlanner');
+        ChargePlannerSite::switchMode($wanted === 'actif');
+    }
+
+    /** Appelé par Jeedom après l'enregistrement de la commande de déclenchement. */
+    public static function postConfig_trigger_cmd($value) {
+        ChargePlannerSite::setupListener();
+    }
+
+    /** Écouteur : nouvelle mesure du tableau => cycle de régulation. */
+    public static function onTrigger($_option = array()) {
+        ChargePlannerSite::regulate();
+    }
+
+    public function getPlannerType() {
+        return (string) $this->getConfiguration('type', 'vehicule');
+    }
+
+    public function cmdValue($logicalId, $default = '') {
+        $cmd = $this->getCmd(null, $logicalId);
+        if (!is_object($cmd)) {
+            return $default;
+        }
+        $value = $cmd->execCmd();
+        return ($value === '' || $value === null) ? $default : $value;
     }
 
     public static function buildCalendar() {
@@ -107,8 +157,20 @@ class ChargePlanner extends eqLogic {
     /* Cycle Jeedom                                                        */
     /* ------------------------------------------------------------------ */
 
+    /** Chien de garde : relance la régulation si l'écouteur s'est tu. */
+    public static function cron() {
+        ChargePlannerSite::ensureCoreEquipments();
+        $pilotage = ChargePlannerSite::pilotageEq();
+        if (is_object($pilotage) && time() - (int) $pilotage->getCache('reg_last_end', 0) > 55) {
+            ChargePlannerSite::regulate(true);
+        }
+    }
+
     public static function cron5() {
         foreach (eqLogic::byType('ChargePlanner', true) as $eqLogic) {
+            if ($eqLogic->getPlannerType() !== 'vehicule') {
+                continue;
+            }
             try {
                 $eqLogic->evaluate();
             } catch (Exception $e) {
@@ -118,6 +180,9 @@ class ChargePlanner extends eqLogic {
     }
 
     public function postInsert() {
+        if ($this->getPlannerType() !== 'vehicule') {
+            return;
+        }
         $defaults = array(
             'capacity_kwh' => 50, 'efficiency' => 90, 'power_w' => 7200, 'margin_min' => 30,
             'prefer_offpeak' => 1, 'default_borne' => 1,
@@ -138,7 +203,8 @@ class ChargePlanner extends eqLogic {
 
     public function checkAndCreateCommands() {
         $order = 0;
-        $commands = array(
+        $type = $this->getPlannerType();
+        $commands = ($type !== 'vehicule') ? ChargePlannerSite::commandsFor($type) : array(
             array('decision', __('Décision', __FILE__), 'info', 'string', '', 1, 1),
             array('reason', __('Raison', __FILE__), 'info', 'string', '', 1, 0),
             array('objective', __('Prochain objectif', __FILE__), 'info', 'string', '', 1, 0),
@@ -186,6 +252,12 @@ class ChargePlanner extends eqLogic {
             $order++;
         }
         // Valeurs initiales pour que le widget ne soit pas vide avant le premier cycle.
+        if ($type === 'borne' && $this->cmdValue('mode', '') === '') {
+            $this->checkAndUpdateCmd('mode', 'Eco');
+        }
+        if ($type === 'pilotage' && $this->cmdValue('priorite', '') === '') {
+            $this->checkAndUpdateCmd('priorite', 'Désactivée');
+        }
         $pilot = $this->getCmd(null, 'pilot');
         if (is_object($pilot) && $pilot->execCmd() === '') {
             $this->checkAndUpdateCmd('pilot', 1);
@@ -199,6 +271,24 @@ class ChargePlanner extends eqLogic {
     public function execute($_options = array()) {
         $action = $_options['action'] ?? '';
         $now = $this->now();
+        $type = $this->getPlannerType();
+        if ($type === 'borne') {
+            if ($action === 'mode_normal' || $action === 'mode_eco') {
+                $this->checkAndUpdateCmd('mode', $action === 'mode_normal' ? 'Normal' : 'Eco');
+                log::add('ChargePlanner', 'info', $this->getName() . ' : mode ' . ($action === 'mode_normal' ? 'Normal' : 'Eco'));
+                ChargePlannerSite::regulate(true);
+            }
+            return;
+        }
+        if ($type === 'pilotage') {
+            $map = array('prio_wb1' => 'WB1', 'prio_wb2' => 'WB2', 'prio_off' => 'Désactivée');
+            if (isset($map[$action])) {
+                $this->checkAndUpdateCmd('priorite', $map[$action]);
+                log::add('ChargePlanner', 'info', 'Priorisation : ' . $map[$action]);
+                ChargePlannerSite::regulate(true);
+            }
+            return;
+        }
         switch ($action) {
             case 'boost_on':
                 $start = self::buildCalendar()->nextOffPeakStart($now, (string) self::globalConfig('boost_time', '00:05'));
@@ -263,22 +353,21 @@ class ChargePlanner extends eqLogic {
     }
 
     private function readBorneMode() {
-        $mode = self::readCmd($this->borneCmd('mode'));
-        return $mode === null ? null : trim((string) $mode['value']);
+        $borne = ChargePlannerSite::borneEq($this->currentBorne());
+        return is_object($borne) ? trim((string) $borne->cmdValue('mode', '')) : null;
     }
 
     private function setBorneMode($mode, $why) {
-        $key = ($mode === 'Normal') ? 'normal' : 'eco';
-        $cmd = self::resolveCmd($this->borneCmd($key));
-        if (!is_object($cmd) || $cmd->getType() !== 'action') {
-            log::add('ChargePlanner', 'error', $this->getHumanName() . ' : commande « ' . $mode . ' » de ' . self::borneName($this->currentBorne()) . ' non configurée');
+        $borne = ChargePlannerSite::borneEq($this->currentBorne());
+        if (!is_object($borne)) {
+            log::add('ChargePlanner', 'error', $this->getHumanName() . ' : équipement ' . self::borneName($this->currentBorne()) . ' introuvable');
             return false;
         }
         if (self::isSimulation()) {
-            log::add('ChargePlanner', 'info', '[Simulation] ' . $this->getHumanName() . ' : passerait ' . self::borneName($this->currentBorne()) . ' en ' . $mode . ' (' . $why . ')');
+            log::add('ChargePlanner', 'info', '[Observation] ' . $this->getHumanName() . ' : passerait ' . self::borneName($this->currentBorne()) . ' en ' . $mode . ' (' . $why . ')');
             return true;
         }
-        $cmd->execCmd();
+        $borne->execute(array('action' => $mode === 'Normal' ? 'mode_normal' : 'mode_eco'));
         log::add('ChargePlanner', 'info', $this->getHumanName() . ' : ' . self::borneName($this->currentBorne()) . ' → ' . $mode . ' (' . $why . ')');
         return true;
     }
@@ -478,7 +567,7 @@ class ChargePlanner extends eqLogic {
         }
 
         if ($simulation) {
-            $reason = '[Simulation] ' . $reason;
+            $reason = '[Observation] ' . $reason;
         }
 
         // Mise à jour des infos.

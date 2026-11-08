@@ -18,25 +18,32 @@
 </head>
 <body>
 <h1><img src="assets/icon.png" alt="">ChargePlanner</h1>
-<p>Planification intelligente de la charge des véhicules électriques. Le plugin choisit, voiture par voiture, si la borne doit charger à fond (mode <strong>Normal</strong>) ou rester en <strong>Eco</strong> pour profiter du surplus solaire. Il ne touche ni aux ampères ni aux limites du compteur : votre scénario de pilotage existant continue de gérer la puissance.</p>
+<p>Plugin privé de pilotage des deux Wallbox : régulation des ampères selon le surplus solaire et la limite du compteur, modes <strong>Normal</strong> / <strong>Eco</strong> par borne, priorisation, et planification de la charge des voitures.</p>
 <p><a href="changelog.html">Changelog</a></p>
 
 <h2>1. Configuration du plugin</h2>
-<p><em>Plugins → Gestion des plugins → ChargePlanner.</em></p>
+<p><em>Plugins → Gestion des plugins → ChargePlanner.</em> Tout est pré-rempli à l'installation ; chaque commande se change avec le bouton liste.</p>
 <ul>
-  <li><strong>Mode simulation</strong> (activé à l'installation) : le plugin calcule et affiche ses décisions mais n'envoie aucune commande. Les décisions sont aussi écrites dans le log <code>ChargePlanner</code> (« passerait la borne en Normal… »). Désactivez-le quand le comportement vous convient.</li>
-  <li><strong>Jours creux</strong> : jours de la semaine creux toute la journée (mercredi, samedi, dimanche par défaut), jours fériés français calculés automatiquement, et dates supplémentaires (une par ligne).</li>
-  <li><strong>Heure de démarrage du boost</strong> : 0h05 par défaut.</li>
-  <li><strong>Bornes 1 et 2</strong> : pour chacune, le nom et les commandes à utiliser (bouton liste pour les choisir) :
-    <table>
-      <tr><th>Champ</th><th>Exemple (plugin myWallBox + virtuel de mode)</th></tr>
-      <tr><td>Mode actuel (info)</td><td><code>#[Maison][Wallbox 01 - Mode][Mode]#</code></td></tr>
-      <tr><td>Passer en Normal / Eco (actions)</td><td><code>#[Maison][Wallbox 01 - Mode][Normal]#</code>, <code>…[Eco]#</code></td></tr>
-      <tr><td>Statut ID (info)</td><td><code>#[Maison][Wallbox01][Statut ID]#</code></td></tr>
-      <tr><td>Énergie de la session (info, kWh)</td><td><code>#[Maison][Wallbox01][Énergie consommée]#</code> (optionnel)</td></tr>
-    </table>
+  <li><strong>Fonctionnement</strong> :
+    <ul>
+      <li><em>Observation</em> (par défaut) : le plugin calcule chaque cycle et publie ce qu'il ferait, sans rien envoyer aux bornes. Le log <code>ChargePlanner</code> affiche « [Observation] ferait : … | Wallbox 01 plugin X A / scénario Y A ». Le scénario de référence reste aux commandes.</li>
+      <li><em>Actif</em> : le plugin reprend l'état du scénario de référence, le désactive et pilote les bornes. Revenir en observation réactive le scénario.</li>
+    </ul>
   </li>
+  <li><strong>Déclencheur et intervalle</strong> : la régulation tourne à chaque mise à jour de la mesure choisie (10 s minimum entre deux cycles), avec une relance de secours chaque minute.</li>
+  <li><strong>Mesures</strong> : consommation maison, réseau, production, batterie maison (SOC et puissance), production PV.</li>
+  <li><strong>Bornes 1 et 2</strong> : statut, puissance maximum, contrôle de la charge, pince, rafraîchir, énergie de session, puissance max.</li>
+  <li><strong>Sources en observation</strong> : les virtuels de mode et de priorisation actuels, recopiés dans les équipements du plugin tant qu'il observe.</li>
+  <li><strong>Régulation</strong> (repliée) : tous les paramètres du scénario V4 ; vide = valeur d'origine.</li>
+  <li><strong>Jours creux</strong> : jours de la semaine (mercredi, samedi, dimanche par défaut), jours fériés français, dates supplémentaires ; heure de démarrage du boost (0h05).</li>
 </ul>
+
+<h2>Équipements Pilotage et Bornes</h2>
+<table>
+  <tr><th>Équipement</th><th>Commandes</th></tr>
+  <tr><td>Pilotage</td><td>Priorisation (Désactivée / WB1 / WB2), Surplus, Budget, Autorisation, Urgence, Raison, Fonctionnement</td></tr>
+  <tr><td>Borne 1 / Borne 2</td><td>Mode, Normal, Eco, Consigne (A), Raison</td></tr>
+</table>
 
 <h2>2. Ajouter une voiture</h2>
 <ul>
@@ -72,7 +79,7 @@
 
 <h2>6. Règles de cohabitation</h2>
 <ul>
-  <li>Le plugin ne remet en Eco que ce qu'il a lui-même passé en Normal.</li>
+  <li>Une voiture ne remet en Eco que ce qu'elle a elle-même passé en Normal.</li>
   <li>Si vous changez le mode à la main pendant une charge forcée, il rend la main pour ce plan et ne le reforce pas.</li>
   <li>Voiture débranchée : aucune action ; si le plugin avait forcé Normal, la borne retrouve son mode d'origine.</li>
 </ul>

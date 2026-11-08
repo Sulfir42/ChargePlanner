@@ -1,12 +1,29 @@
 # ChargePlanner — plugin Jeedom
 
-Planification intelligente de la charge des véhicules électriques.
+Plugin privé de pilotage des deux Wallbox de la maison : régulation des
+ampères (surplus solaire, limite du compteur), modes Normal / Eco par borne,
+priorisation, et planification de la charge des voitures (objectifs, boost,
+jours creux).
 
-ChargePlanner décide, voiture par voiture, si la borne doit charger à fond
-(mode **Normal**) ou rester en **Eco** pour profiter du surplus solaire. Il
-ne pilote ni les ampères ni les limites du compteur : il se contente de
-basculer le mode de la borne, et laisse votre scénario de pilotage existant
-faire le reste.
+## Équipements
+
+- **Pilotage** : priorisation (Désactivée / WB1 / WB2), surplus, budget,
+  autorisation, urgence, raison, fonctionnement.
+- **Borne 1 / Borne 2** : mode (Normal / Eco), consigne en ampères, raison.
+- **Une fiche par voiture** : objectifs, boost, borne du jour.
+
+## Observation puis actif
+
+À l'installation, le plugin est en **observation** : il calcule chaque cycle,
+publie ce qu'il ferait et l'écrit dans son log à côté de la consigne du
+scénario de référence, mais n'envoie rien aux bornes. En passant en **actif**
+(configuration du plugin), il reprend l'état du scénario de référence et le
+désactive ; le retour en observation le réactive. Il n'y a jamais deux
+pilotes en même temps.
+
+La régulation est un portage fidèle du scénario « Pilotage Wallbox V4.0 »,
+vérifié cycle par cycle contre l'original (`tests/regulator_diff_test.php`).
+Tous ses paramètres sont réglables dans la configuration du plugin.
 
 ## Fonctions
 
@@ -27,8 +44,6 @@ faire le reste.
   30 min après le débranchement.
 - **Batterie estimée** : entre deux remontées (souvent espacées) du
   constructeur, le % est complété avec l'énergie comptée par la borne.
-- **Mode simulation** activé à l'installation : tout est calculé et affiché,
-  aucune commande n'est envoyée.
 
 ## Cohabitation
 
@@ -41,7 +56,9 @@ faire le reste.
 
 ```
 php tests/engine_test.php   # moteur de décision et calendrier
-php tests/plugin_test.php   # classe Jeedom avec un noyau simulé
+php tests/plugin_test.php   # voitures, avec un noyau Jeedom simulé
+php tests/site_test.php     # régulation, bornes, observation / actif
+php tests/regulator_diff_test.php  # portage comparé au scénario d'origine
 ```
 
 ## Licence

@@ -39,6 +39,14 @@ function chargePlannerPickCmd(type, input) {
 }
 
 
+/* Affiche les sections propres aux voitures, ou l'encart des équipements du plugin. */
+function printEqLogic(_eqLogic) {
+  var type = (_eqLogic && _eqLogic.configuration && _eqLogic.configuration.type) ? _eqLogic.configuration.type : 'vehicule';
+  var isVehicle = (type === 'vehicule');
+  document.querySelectorAll('.cp-vehicule').forEach(function (el) { el.style.display = isVehicle ? '' : 'none'; });
+  document.querySelectorAll('.cp-site').forEach(function (el) { el.style.display = isVehicle ? 'none' : ''; });
+}
+
 function addCmdToTable(_cmd) {
   if (!isset(_cmd)) {
     _cmd = { configuration: {} };

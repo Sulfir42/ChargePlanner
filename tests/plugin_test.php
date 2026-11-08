@@ -55,6 +55,9 @@ class cmd {
 class eqLogic {
     public $conf = array(); public $cache = array(); public $cmds = array(); public $infos = array();
     public static function byType($t, $onlyEnable = false) { return $GLOBALS['EQ']; }
+    public static function byLogicalId($id, $type) { return $GLOBALS['BYLOGICAL'][$id] ?? null; }
+    public function getName() { return 'eq'; }
+    public function getIsEnable() { return 1; }
     public function getConfiguration($k, $d = '') { return array_key_exists($k, $this->conf) ? $this->conf[$k] : $d; }
     public function setConfiguration($k, $v) { $this->conf[$k] = $v; }
     public function getCache($k, $d = '') { return array_key_exists($k, $this->cache) ? $this->cache[$k] : $d; }
@@ -86,18 +89,19 @@ function mkcmd($id, $human, $type, $value = '') {
     $c = new cmd(); $c->id = $id; $c->human = $human; $c->type = $type; $c->value = $value; $c->date = '2026-11-10 20:00:00';
     $GLOBALS['CMDS'][$id] = $c; return $c;
 }
-$mode = mkcmd(10, '#[M][WB1][Mode]#', 'info', 'Eco');
-$normal = mkcmd(11, '#[M][WB1][Normal]#', 'action'); $normal->onExec = function () use ($mode) { $mode->value = 'Normal'; };
-$eco = mkcmd(12, '#[M][WB1][Eco]#', 'action'); $eco->onExec = function () use ($mode) { $mode->value = 'Eco'; };
+// Équipement Borne 1 du plugin, qui porte le mode
+$borne1 = new TestPlanner();
+$borne1->conf = array('type' => 'borne', 'borne_id' => 1);
+$mode = new cmd(); $mode->value = 'Eco'; $borne1->cmds['mode'] = $mode;
+$GLOBALS['BYLOGICAL'] = array('borne1' => $borne1);
 $status = mkcmd(13, '#[M][WB1][Statut ID]#', 'info', 182);
 $energy = mkcmd(14, '#[M][WB1][Energie]#', 'info', 0);
 $soc = mkcmd(20, '#[G][E208][Batterie]#', 'info', 50);
 
 $GLOBALS['CONFIG'] = array(
-    'simulation' => 0, 'boost_time' => '00:05', 'offpeak_holidays' => 1,
+    'fonctionnement' => 'actif', 'boost_time' => '00:05', 'offpeak_holidays' => 1,
     'offpeak_day_3' => 1, 'offpeak_day_6' => 1, 'offpeak_day_7' => 1,
     'borne1_name' => 'Wallbox 01',
-    'borne1_mode' => '#[M][WB1][Mode]#', 'borne1_normal' => '#[M][WB1][Normal]#', 'borne1_eco' => '#[M][WB1][Eco]#',
     'borne1_status' => '#[M][WB1][Statut ID]#', 'borne1_energy' => '#[M][WB1][Energie]#',
 );
 
@@ -168,13 +172,13 @@ $soc->value = 100; $soc->date = '2026-11-15 21:30:00';
 $eq->at('2026-11-15 21:35');
 check('100 % atteint : retour Eco', $mode->value === 'Eco', $eq->infos['reason']);
 
-echo "Mode simulation\n";
-$GLOBALS['CONFIG']['simulation'] = 1;
+echo "Fonctionnement observation\n";
+$GLOBALS['CONFIG']['fonctionnement'] = 'observation';
 $soc->value = 40; $soc->date = '2026-11-22 10:00:00'; $status->value = 182; $energy->value = 0;
 $eq->at('2026-11-22 20:00');
-check('Simulation : décision Normal affichée, borne inchangée', $eq->infos['decision'] === 'Normal' && $mode->value === 'Eco', $eq->infos['reason']);
-check('Raison préfixée [Simulation]', strpos($eq->infos['reason'], '[Simulation]') === 0);
-$GLOBALS['CONFIG']['simulation'] = 0;
+check('Observation : décision Normal affichée, borne inchangée', $eq->infos['decision'] === 'Normal' && $mode->value === 'Eco', $eq->infos['reason']);
+check('Raison préfixée [Observation]', strpos($eq->infos['reason'], '[Observation]') === 0);
+$GLOBALS['CONFIG']['fonctionnement'] = 'actif';
 
 echo "Voiture non branchée\n";
 $status->value = 161;
