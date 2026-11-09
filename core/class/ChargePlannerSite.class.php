@@ -147,6 +147,9 @@ class ChargePlannerJeedomIO implements ChargePlannerRegulatorIO {
 }
 
 class ChargePlannerSite {
+    /** Écart maximal (s) entre deux lancements du scénario pour un seul passage (il tourne toutes les ~15 s). */
+    const OBS_SINGLE_RUN_MAX = 22;
+
 
     const STATE_CACHE = 'reg_state';
 
@@ -451,8 +454,18 @@ class ChargePlannerSite {
             $stats = array('day' => $day, 'n' => 0, 'ok' => 0, 'hour' => (int) date('G', $now), 'hn' => 0, 'hok' => 0);
         }
 
+        // Dernier lancement du scénario : on ne compare que si le scénario a tourné
+        // une seule fois depuis la prédiction. S'il a tourné deux fois (il a
+        // rattrapé le plugin), on comparerait au résultat de deux passages, ce qui
+        // fausse tout quand les consignes alternent d'un passage à l'autre.
+        $launch = method_exists($scenario, 'getLastLaunch') ? (int) strtotime((string) $scenario->getLastLaunch()) : 0;
         $pred = $pilotage->getCache('obs_pred', array());
-        if (is_array($pred) && isset($pred['hash']) && $pred['hash'] !== $hash && $now - (int) $pred['ts'] < 120) {
+        $singleRun = true;
+        if ($launch > 0 && isset($pred['launch']) && (int) $pred['launch'] > 0) {
+            $gap = $launch - (int) $pred['launch'];
+            $singleRun = ($gap > 0 && $gap <= self::OBS_SINGLE_RUN_MAX);
+        }
+        if (is_array($pred) && isset($pred['hash']) && $pred['hash'] !== $hash && $now - (int) $pred['ts'] < 120 && $singleRun) {
             foreach (ChargePlanner::BORNES as $i) {
                 $p = (int) $pred['wb' . $i];
                 $ok = abs($p - $ref[$i]) <= 2;
@@ -481,7 +494,7 @@ class ChargePlannerSite {
         }
         $pilotage->setCache('obs_stats', $stats);
 
-        $pred = array('hash' => $hash, 'ts' => $now, 'raison' => $out['raison']);
+        $pred = array('hash' => $hash, 'ts' => $now, 'launch' => $launch, 'raison' => $out['raison']);
         foreach (ChargePlanner::BORNES as $i) {
             $pred['wb' . $i] = (int) $out['wb' . $i . '_cible'];
         }

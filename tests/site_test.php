@@ -37,6 +37,8 @@ class scenario {
     public function getIsActive() { return $this->active; }
     public function setIsActive($a) { $this->active = $a; }
     public function getName() { return 'Pilotage Wallbox'; }
+    public $lastLaunch = '';
+    public function getLastLaunch() { return $this->lastLaunch; }
     public function save() {}
 }
 class cmd {
@@ -158,7 +160,8 @@ echo "Comparaison avec le scénario\n";
 $pred = $pil->getCache('obs_pred');
 check('Prédiction mémorisée', isset($pred['wb1']) && $pred['wb1'] === (int) $b1->cmdValue('cible'));
 check('Consigne du scénario publiée', (int) $b1->cmdValue('cible_ref') === 6);
-// Le scénario tourne et arrive au même résultat que la prédiction (WB1), mais pas WB2.
+// Le scénario tourne une fois et arrive au même résultat que la prédiction (WB1), mais pas WB2.
+$sc->lastLaunch = date('Y-m-d H:i:s', time() + 15);
 $sc->data['wb1_cible'] = $pred['wb1']; $sc->data['wb2_cible'] = $pred['wb2'] + 10;
 $pil->setCache('reg_last_end', 0);
 ChargePlannerSite::regulate();
@@ -169,6 +172,12 @@ check('Écart écrit dans le log', count(array_filter($GLOBALS['LOG'], function 
 $pil->setCache('reg_last_end', 0);
 ChargePlannerSite::regulate();
 check('État du scénario inchangé : pas de nouvelle comparaison', $pil->getCache('obs_stats')['n'] === 2);
+// Le scénario a tourné deux fois depuis la dernière prédiction : pas de comparaison.
+$sc->lastLaunch = date('Y-m-d H:i:s', time() + 45);
+$sc->data['wb2_cible'] = 1;
+$pil->setCache('reg_last_end', 0);
+ChargePlannerSite::regulate();
+check('Deux passages du scénario : comparaison ignorée', $pil->getCache('obs_stats')['n'] === 2);
 $sc->data['wb1_cible'] = 6; $sc->data['wb2_cible'] = 0;
 
 echo "Passage en actif\n";
